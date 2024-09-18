@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+	<head>
+		<meta charset="UTF-8">
+		<title>Home Page</title>
+	</head>
+	<body>
+		<div>
+			Welcome <span th:text="${name}"></span>
+		</div>
+		<div>
+			<!-- La ruta "/logout" es la ruta por defecto que utiliza Spring para realizar el proceso de logout -->
+			<a th:href="@{/logout}">Logout</a>
+		</div>
+	</body>
+</html>

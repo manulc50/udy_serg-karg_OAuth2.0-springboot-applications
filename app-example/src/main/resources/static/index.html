@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<title>Javascript application with PCKE</title>
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+		<script type="text/javascript">
+		
+			// Genera el valor del campo opcional "state" para realizar la petición http PCKE al servidor de authorización
+			function generateState(lenght) {
+				let stateValue = "";
+				let alphaNumericCharacters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012345678";
+				let alphaNumericCharactersLength = alphaNumericCharacters.length;
+				
+				// Para el valor del campo opcional "state", se genera una cadena de texto alfanumérica de tamaño "lenght" formada por caracteres elegidos aleatoriamente desde la cadena de texto "alphaNumericCharacters"
+				for(let i = 0; i < lenght; i++)
+					stateValue += alphaNumericCharacters.charAt(Math.floor(Math.random() * alphaNumericCharactersLength))
+			
+				// Inserta el valor generador para el campo "state" en el elemento, cuyo identificador es "stateValue", de este documento HTML
+				document.getElementById("stateValue").innerHTML = stateValue;
+			}
+			
+			// Genera el valor del campo "code_verifier" requerido para realizar la petición http PCKE al servidor de authorización
+			function generateCodeVerifier() {
+				let returnValue = "";
+				let randomByteArray = new Uint8Array(32);
+				
+				// Genera bytes aleatorios y los inserta en el array "randomByteArray"
+				window.crypto.getRandomValues(randomByteArray);
+				
+				// Codifica los bytes del array "randomByteArray" usando base64
+				returnValue = base64urlencode(randomByteArray);
+				
+				// Inserta el valor generado para el campo "code_verifier" en el elemento, cuyo identificador es "codeVerifierValue", de este documento HTML
+				document.getElementById("codeVerifierValue").innerHTML = returnValue;
+			}
+			
+			// Genera el valor del campo "code_challenge" requerido para realizar la petición http PCKE al servidor de authorización
+			async function generateCodeChallenge() {
+				// code_challenge = BASE64URL-ENCODE(SHA256(ASCII(code_verifier)))
+				let codeChallengeValue = "";
+				let codeVerifier = document.getElementById("codeVerifierValue").innerHTML;
+				let textEncoder = new TextEncoder("US-ASCII");
+				let encodedValue = textEncoder.encode(codeVerifier);
+				let digest = await window.crypto.subtle.digest("SHA-256", encodedValue);
+				
+				codeChallengeValue = base64urlencode(Array.from(new Uint8Array(digest)));
+				
+				// Inserta el valor generado para el campo "code_challenge" en el elemento, cuyo identificador es "codeChallengeValue", de este documento HTML
+				document.getElementById("codeChallengeValue").innerHTML = codeChallengeValue;
+				
+			}
+			
+			// Codifica el valor de "sourceValue" usando base64
+			function base64urlencode(sourceValue) {
+				let stringValue = String.fromCharCode.apply(null, sourceValue);
+				let base64Encoded = btoa(stringValue);
+				let base64urlEncoded = base64Encoded.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+				
+				return base64urlEncoded;
+			}
+			
+			// Crea la URL para obtener el código de autorización del servidor de autorización y ejecuta esa petición http en una nueva ventana del navegador
+			function getAuthCode() {
+				let state = document.getElementById("stateValue").innerHTML;
+				let codeChallenge = document.getElementById("codeChallengeValue").innerHTML;
+				
+				let authorizationUrl = "http://localhost:8080/auth/realms/appsdeveloperblog/protocol/openid-connect/auth";
+				authorizationUrl += "?client_id=photo-app-PKCE-client";
+				authorizationUrl += "&response_type=code";
+				authorizationUrl += "&scope=openid";
+				authorizationUrl += "&redirect_uri=http://localhost:8181/authcodeReader.html";
+				authorizationUrl += "&state=" + state;
+				authorizationUrl += "&code_challenge=" + codeChallenge;
+				authorizationUrl += "&code_challenge_method=S256";
+				
+				// Abre una nueva ventana del navegador y ejecuta la URL para obtener el código de autorización del servidor de autorización
+				window.open(authorizationUrl, "authorizationRequestWindow", "width=800, height=600, left=200, top=200");
+			}
+			
+			function postAuthorize(state, authCode) {
+				let originalStateValue = document.getElementById("stateValue").innerHTML;
+				
+				// Comprueba el valor del "state" que llega desde el servidor de autorización con el valor original del "state" que se generó
+				// Si son iguales, se invoca a la función "requestAccessToken" que solicta un Access Token(token JWT) al servidor de autorización a partir del código de autorización recibido de dicho servidor
+				if(state == originalStateValue)
+					requestAccessToken(authCode);
+				// En caso contrario, se muestra una alerta visual en el navegador con un mensaje de error
+				else
+					alert("Invalid state value received");
+			}
+			
+			// Realiza una petición http Post al servidor de autorización para intercambiar el código de autorización por un Access Token(Token JWT)
+			function requestAccessToken(authCode) {
+				let codeVerifier = document.getElementById("codeVerifierValue").innerHTML;
+				let data = {
+						grant_type: "authorization_code",
+						client_id: "photo-app-PKCE-client",
+						code: authCode,
+						code_verifier: codeVerifier,
+						redirect_uri: "http://localhost:8181/authcodeReader.html"
+				};
+				
+				// Realiza una petición http Post al servidor de autorización para intercambiar el código de autorización por un Access Token(Token JWT)
+				// Se trata de una petición Ajax que son asíncronas y manejas funciones Callback
+				$.ajax({
+					// Antes de realizar la petición http al servidor de autorización, se establece una cabecera "Content-type" con el valor "application/x-www-form-urlencoded; charset=UTF-8" para indicar el formato de los datos que se envían en la petición http
+					beforeSend: function(request) {
+						request.setRequestHeader("Content-type", "application/x-www-form-urlencoded; charset=UTF-8");
+					},
+					type: "POST", // Tipo de la petición http
+					url: "http://localhost:8080/auth/realms/appsdeveloperblog/protocol/openid-connect/token", // Url de la petición http hacia el servidor de autorización
+					data, // Equivalente a la expresión "data: data"
+					success: postRequestAccessToken, // Función Callback en caso de que la petición http Post sea satisfactoria
+					dataType: "json" // Indicamos que se espera recibir los datos desde el servidor de autorización en formato JSON
+				});
+			}
+			
+			// Función Callback de éxito de la petición http Ajax de tipo Post que se realiza en la función anterior "requestAccessToken"
+			// "data" - Son los datos de la respuesta de la petición http
+			// "status" - Es el código de estado de la respuesta de la petición http
+			// "jqXHR" - Es el objeto de la respuesta de la petición http
+			function postRequestAccessToken(data, status, jqXHR) {
+				// Inserta el valor del Access Token(Token JWT) en el elemento, cuyo identificador es "accessToken", de este documento HTML
+				// Se espera que "data" sea un JSON que contenga un campo llamado "acces_token" con el Access Token(Token JWT)
+				document.getElementById("accessToken").innerHTML = data["access_token"];
+			}
+			
+			// Realiza una petición http Get a un recurso protegido de uno de nuestros servidores de recursos a través de nuestro Api Gateway
+			function getInfoFromResourceServer() {
+				let accessToken = document.getElementById("accessToken").innerHTML;
+				
+				// Realiza una petición http Get a un recurso protegido de uno de nuestros servidores de recursos a través de nuestro Api Gateway
+				// Se trata de una petición Ajax que son asíncronas y manejas funciones Callback
+				$.ajax({
+					// Antes de realizar la petición http al servidor de recursos a través de nuestro Api Gateway, se establece una cabecera "Authorization" con el prefijo "Bearer " seguido del Access Token(Token JWT) para que el servidor de recursos pueda validar dicho token
+					beforeSend: function(request) {
+						request.setRequestHeader("Authorization", "Bearer " + accessToken);
+					},
+					type: "GET", // Tipo de la petición http
+					url: "http://localhost:8082/users/status/check", // Url de la petición http hacia nuestro Api Gateway
+					success: postInfoFromResourceServer, // Función Callback en caso de que la petición http Get sea satisfactoria
+					dataType: "text" // Indicamos que se espera recibir los datos desde el servidor de recursos en formato texto
+				});
+			}
+			
+			// Función Callback de éxito de la petición http Ajax de tipo Get que se realiza en la función anterior "getInfoFromResourceServer"
+			// "data" - Son los datos de la respuesta de la petición http
+			// "status" - Es el código de estado de la respuesta de la petición http
+			// "jqXHR" - Es el objeto de la respuesta de la petición http
+			function postInfoFromResourceServer(data, status, jqXHR) {
+				// Muestra una alerta visual en el navegador con la respuesta de la petición http
+				alert(data);
+			}
+					
+		</script>
+	</head>
+	<body>
+		<h1>Index page</h1>
+		
+		<div id="stateValue"></div>
+		<div>
+			<input type="button" value="Generate state value" onclick="generateState(30)"/>
+		</div>
+		
+		<div id="codeVerifierValue"></div>
+		<div>
+			<input type="button" value="Generate Code Verifier value" onclick="generateCodeVerifier()"/>
+		</div>
+		
+		<div id="codeChallengeValue"></div>
+		<div>
+			<input type="button" value="Generate Code Challenge value" onclick="generateCodeChallenge()"/>
+		</div>
+		<br/>
+		<div>
+			<input type="button" value="Get Auth Code" onclick="getAuthCode()"/>
+		</div>
+		
+		<p>
+			Access Token(Token JWT):
+			<span id="accessToken"></span>
+		</p>
+		<br/>
+		<div>
+			<input type="button" value="Load" onclick="getInfoFromResourceServer()"/>
+		</div>
+	</body>
+</html>

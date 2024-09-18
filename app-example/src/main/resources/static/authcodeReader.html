@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<title>Code reader</title>
+	</head>
+	<body>
+		<script type="text/javascript">
+		console.log("HOLAAAAAAAAAAAAAAA");
+			// Obtiene de la url el código de authorización, el "state", el error y su descripción
+			let urlParams = new URLSearchParams(window.location.search);
+			let authCode = urlParams.get("code");
+			let state = urlParams.get("state");
+			let error = urlParams.get("error");
+			let errorDescription = urlParams.get("error_description");
+			
+			// Si ha habido algún error a la hora de obtener el código de autorización del servidor de autorización, mostramos una alerta visual en el navegador con la información de ese error
+			if(error)
+				window.alert("The following error took place: " + error + ". Description of error: " + errorDescription);
+			// En caso contrario, ejecuta el código de la función "postAuthorize" del documento "index.html" que es la página que abrió la ventana del navegador con este doumento "authcodeReader.html"
+			// "window.opener" es un objeto que se corresponde con el documento HTML que abrió la ventana del navegador con este documneto HTML "authcodeReader.html"
+			else
+				window.opener.postAuthorize(state, authCode);
+			
+			window.close();
+		</script>
+	</body>
+</html>
